@@ -371,7 +371,7 @@ opts <- list( "algorithm" = "NLOPT_LN_SBPLX", #"NLOPT_LN_NEWUOA",NLOPT_LN_SBPLX 
               "ftol_rel" = 1e-7,
               "ftol_abs" = 0.0,
               "xtol_abs" = 0.0 ,
-              "maxeval" = 100,
+              "maxeval" = 1000,
               "print_level" = 1)
 
 
@@ -380,8 +380,8 @@ x0 <-  c(log(10),log(8),5,1,1)#,-17,1,1,-5)
 set.seed(435)
 optimization<- nloptr::nloptr(x0 = x0,
                               eval_f = obj_func,
-                              lb	=  c(log(6.551),log(6.551),-10,-10,-5),#-30,-10,-10,-10),
-                              ub =   c(log(2500),log(100),7,7,7),#-5,7,7,2),
+                              lb	=  c(log(6.551),log(6.551),-20,-20,-20),#-30,-10,-10,-10),
+                              ub =   c(log(5000),log(100),20,20,20),#-5,7,7,2),
                               opts = opts,
                               dose = dose,
                               df = df,

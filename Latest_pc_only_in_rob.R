@@ -101,7 +101,7 @@ create.params <<- function(weight){
                        "Brain"="Brain", "Spleen"="Spleen",
                        "Lungs"="Lungs", "Liver"="Liver", "Uterus"="Uterus", 
                        "Bone"="Bone", "Adipose"="Adipose", "Skin"="Skin",
-                       "Muscles"="Muscles",
+                       "MusCLE_fs"="MusCLE_fs",
                        "GIT"="GIT") # List with names of all possible compartments
   
   ### Density of tissues/organs
@@ -144,7 +144,7 @@ create.params <<- function(weight){
   fw_uterus <- Tissue_fractions[9]
   fw_adipose <- Tissue_fractions[10]
   fw_skin <- Tissue_fractions[11]
-  fw_muscles <- Tissue_fractions[12]
+  fw_musCLE_fs <- Tissue_fractions[12]
   fw_git <- Tissue_fractions[13]
   
   ### Calculation of tissue weights  
@@ -158,7 +158,7 @@ create.params <<- function(weight){
   W_tis[9] <- fw_skeleton*weight
   W_tis[10] <- fw_adipose*weight
   W_tis[11] <- fw_skin*weight
-  W_tis[12] <- fw_muscles*weight
+  W_tis[12] <- fw_musCLE_fs*weight
   W_tis[13] <- fw_git*weight
   
   for (i in 1:length(compartments)) {
@@ -267,11 +267,11 @@ Rat_model <- function(time, inits, params){
     
     #Rest of the body
     dM_rob_cap <-  Q_total*C_art - (Q_total-QL_rob)*C_rob_cap - 
-                    (1-sigma_rob)*QL_rob*C_rob_cap -M_rob_cap*pc_endo-
-                (CLE*M_rob_cap)/(Km+M_rob_cap)
-    dM_rob_is <- (1-sigma_rob)*QL_rob*C_rob_cap - QL_rob*C_rob_is 
-    dM_rob_cell <- 0
-    dM_rob_pc <-  M_rob_cap*pc_endo
+                    (1-sigma_rob)*QL_rob*C_rob_cap 
+    dM_rob_is <- (1-sigma_rob)*QL_rob*C_rob_cap - QL_rob*C_rob_is - CLE_f*M_rob_is-
+                  M_rob_is*pc_rob - k_rob_in *M_rob_is+ k_rob_out *M_rob_cell 
+    dM_rob_cell <- k_rob_in *M_rob_is - k_rob_out *M_rob_cell 
+    dM_rob_pc <-  M_rob_is*pc_rob
     
     # Venous Blood
     dM_ven <- (Q_total-QL_rob)*C_rob_cap + QL_rob*C_rob_is + QL_lu*C_lu_is- Q_total*C_ven
@@ -280,7 +280,7 @@ Rat_model <- function(time, inits, params){
     dM_art <- (Q_total-QL_lu)*C_lu_cap - Q_total*C_art
     
     # Excreta
-    dM_excreta <- (CLE*M_rob_cap)/(Km+M_rob_cap)
+    dM_excreta <- CLE_f*M_rob_is
     
     Whole_blood <- M_art+M_ven
     Lungs <- M_lu_cap + M_lu_is + M_lu_pc+ M_lu_cell
@@ -299,8 +299,8 @@ Rat_model <- function(time, inits, params){
 obj_func <- function(x, dose, df, pars, metric = "AAFE"){
   BodyBurden <- c(df$lungs, df$rob, df$excreta, df$blood)
   parms <- c("rob_pore_size" = exp(x[1]), "lung_pore_size" = exp(x[2]),
-             "CLE" = exp(x[3]),"Km" = exp(x[4]),
-             "pc_endo" =  exp(x[5]) ,
+             "CLE_f" = exp(x[3]),#"pc_lu" = exp(x[4]),
+             "pc_rob" =  exp(x[4]) ,
              #"pc_exo" =  exp(x[6]), "Q_pc_sinusoids" =  exp(x[7]),"Q_pc_interstitial" =  exp(x[8]),
              # "Q_pc_lu" =  exp(x[9]),
              
@@ -371,7 +371,7 @@ opts <- list( "algorithm" = "NLOPT_LN_SBPLX", #"NLOPT_LN_NEWUOA",NLOPT_LN_SBPLX 
               "ftol_rel" = 1e-7,
               "ftol_abs" = 0.0,
               "xtol_abs" = 0.0 ,
-              "maxeval" = 100,
+              "maxeval" = 200,
               "print_level" = 1)
 
 
@@ -380,22 +380,22 @@ x0 <-  c(log(10),log(8),5,1,1)#,-17,1,1,-5)
 set.seed(435)
 optimization<- nloptr::nloptr(x0 = x0,
                               eval_f = obj_func,
-                              lb	=  c(log(6.551),log(6.551),-10,-10,-5),#-30,-10,-10,-10),
-                              ub =   c(log(2500),log(100),7,7,7),#-5,7,7,2),
+                              lb	=  c(log(6.551),log(6.551),-7,-7,-7),#-30,-10,-10,-10),
+                              ub =   c(log(5000),log(100),10,10,10),#-5,7,7,2),
                               opts = opts,
                               dose = dose,
                               df = df,
-                              metric = "SODI",
+                              metric = "AAFE",
                               pars = list("all_weights" = all_weights,
                                           "physiological_pars" = physiological_pars ))
 
 
 parms <- c("rob_pore_size" = exp(optimization$solution[1]), 
            "lung_pore_size" = exp(optimization$solution[2]),
-           "CLE" = exp(optimization$solution[3]),
-           "Km" =  exp(optimization$solution[4]),
+           "CLE_f" = exp(optimization$solution[3]),
+           #"pc_lu" =  exp(optimization$solution[4]),
            
-           "pc_endo" =  exp(optimization$solution[5]) ,
+           "pc_rob" =  exp(optimization$solution[4]) ,
            # "pc_exo" =  exp(optimization$solution[6]),
            # "Q_pc_sinusoids" =  exp(optimization$solution[7]) ,
            # "Q_pc_interstitial" =  exp(optimization$solution[8]),

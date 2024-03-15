@@ -101,7 +101,7 @@ create.params <<- function(weight){
                        "Brain"="Brain", "Spleen"="Spleen",
                        "Lungs"="Lungs", "Liver"="Liver", "Uterus"="Uterus", 
                        "Bone"="Bone", "Adipose"="Adipose", "Skin"="Skin",
-                       "Muscles"="Muscles",
+                       "MusCLE_fs"="MusCLE_fs",
                        "GIT"="GIT") # List with names of all possible compartments
   
   ### Density of tissues/organs
@@ -144,7 +144,7 @@ create.params <<- function(weight){
   fw_uterus <- Tissue_fractions[9]
   fw_adipose <- Tissue_fractions[10]
   fw_skin <- Tissue_fractions[11]
-  fw_muscles <- Tissue_fractions[12]
+  fw_musCLE_fs <- Tissue_fractions[12]
   fw_git <- Tissue_fractions[13]
   
   ### Calculation of tissue weights  
@@ -158,7 +158,7 @@ create.params <<- function(weight){
   W_tis[9] <- fw_skeleton*weight
   W_tis[10] <- fw_adipose*weight
   W_tis[11] <- fw_skin*weight
-  W_tis[12] <- fw_muscles*weight
+  W_tis[12] <- fw_musCLE_fs*weight
   W_tis[13] <- fw_git*weight
   
   for (i in 1:length(compartments)) {
@@ -261,17 +261,17 @@ Rat_model <- function(time, inits, params){
     # Lungs
     dM_lu_cap <-  Q_total*C_ven - (Q_total-QL_lu)*C_lu_cap - (1-sigma_lu)*QL_lu*C_lu_cap 
     dM_lu_is <- (1-sigma_lu)*QL_lu*C_lu_cap   -QL_lu*C_lu_is -
-                      k_lu_in *M_lu_is + k_lu_out *M_lu_cell 
+                      k_lu_in *M_lu_is + k_lu_out *M_lu_cell - M_lu_is*pc_lu
     dM_lu_cell <- k_lu_in *M_lu_is - k_lu_out *M_lu_cell
-    dM_lu_pc <-  0
+    dM_lu_pc <- M_lu_is*pc_lu
     
     #Rest of the body
     dM_rob_cap <-  Q_total*C_art - (Q_total-QL_rob)*C_rob_cap - 
-                    (1-sigma_rob)*QL_rob*C_rob_cap -M_rob_cap*pc_endo-
-                (CLE*M_rob_cap)/(Km+M_rob_cap)
-    dM_rob_is <- (1-sigma_rob)*QL_rob*C_rob_cap - QL_rob*C_rob_is 
-    dM_rob_cell <- 0
-    dM_rob_pc <-  M_rob_cap*pc_endo
+                    (1-sigma_rob)*QL_rob*C_rob_cap - M_rob_cap*pc_rob
+    dM_rob_is <- (1-sigma_rob)*QL_rob*C_rob_cap - QL_rob*C_rob_is - CLE_f*M_rob_is-
+                  - k_rob_in *M_rob_is+ k_rob_out *M_rob_cell 
+    dM_rob_cell <- k_rob_in *M_rob_is - k_rob_out *M_rob_cell 
+    dM_rob_pc <- M_rob_cap*pc_rob
     
     # Venous Blood
     dM_ven <- (Q_total-QL_rob)*C_rob_cap + QL_rob*C_rob_is + QL_lu*C_lu_is- Q_total*C_ven
@@ -280,7 +280,7 @@ Rat_model <- function(time, inits, params){
     dM_art <- (Q_total-QL_lu)*C_lu_cap - Q_total*C_art
     
     # Excreta
-    dM_excreta <- (CLE*M_rob_cap)/(Km+M_rob_cap)
+    dM_excreta <- CLE_f*M_rob_is
     
     Whole_blood <- M_art+M_ven
     Lungs <- M_lu_cap + M_lu_is + M_lu_pc+ M_lu_cell
@@ -299,14 +299,16 @@ Rat_model <- function(time, inits, params){
 obj_func <- function(x, dose, df, pars, metric = "AAFE"){
   BodyBurden <- c(df$lungs, df$rob, df$excreta, df$blood)
   parms <- c("rob_pore_size" = exp(x[1]), "lung_pore_size" = exp(x[2]),
-             "CLE" = exp(x[3]),"Km" = exp(x[4]),
-             "pc_endo" =  exp(x[5]) ,
+             "CLE_f" = exp(x[3]),"pc_lu" = exp(x[4]),
+             "pc_rob" =  exp(x[5]) ,
+             "k_rob_in" =  exp(x[6]),
+             "k_rob_out" =  exp(x[7]) ,
              #"pc_exo" =  exp(x[6]), "Q_pc_sinusoids" =  exp(x[7]),"Q_pc_interstitial" =  exp(x[8]),
              # "Q_pc_lu" =  exp(x[9]),
              
              "Hct" = 0.45,  "np_size" = 6.55,
              'k_lu_in' = 0.400,  'k_lu_out' =0.0598,
-             "k_rob_in" = 0.051, "k_rob_out" = 0.063,
+           #  "k_rob_in" = 0.051, "k_rob_out" = 0.063,
              "physiological_pars" = pars$physiological_pars, 
              "all_weights" = pars$all_weights)
   sol_times <- c(seq(0,1, 0.001),seq(1.1,5, 0.1),  seq(6,28*24, 1))
@@ -371,38 +373,38 @@ opts <- list( "algorithm" = "NLOPT_LN_SBPLX", #"NLOPT_LN_NEWUOA",NLOPT_LN_SBPLX 
               "ftol_rel" = 1e-7,
               "ftol_abs" = 0.0,
               "xtol_abs" = 0.0 ,
-              "maxeval" = 100,
+              "maxeval" = 200,
               "print_level" = 1)
 
 
 # Define initial values of fitted parameters to provide to the optimization routine
-x0 <-  c(log(10),log(8),5,1,1)#,-17,1,1,-5)
+x0 <-  c(log(10),log(8),1,1,1,1,1)#,-17,1,1,-5)
 set.seed(435)
 optimization<- nloptr::nloptr(x0 = x0,
                               eval_f = obj_func,
-                              lb	=  c(log(6.551),log(6.551),-10,-10,-5),#-30,-10,-10,-10),
-                              ub =   c(log(2500),log(100),7,7,7),#-5,7,7,2),
+                              lb	=  c(log(6.551),log(6.551),-7,-7,-7, log(0.01),log(0.01)),#-30,-10,-10,-10),
+                              ub =   c(log(5000),log(100),10,10,10, log(2),log(2)),#-5,7,7,2),
                               opts = opts,
                               dose = dose,
                               df = df,
-                              metric = "SODI",
+                              metric = "rmse",
                               pars = list("all_weights" = all_weights,
                                           "physiological_pars" = physiological_pars ))
 
 
 parms <- c("rob_pore_size" = exp(optimization$solution[1]), 
            "lung_pore_size" = exp(optimization$solution[2]),
-           "CLE" = exp(optimization$solution[3]),
-           "Km" =  exp(optimization$solution[4]),
+           "CLE_f" = exp(optimization$solution[3]),
+           "pc_lu" =  exp(optimization$solution[4]),
            
-           "pc_endo" =  exp(optimization$solution[5]) ,
-           # "pc_exo" =  exp(optimization$solution[6]),
-           # "Q_pc_sinusoids" =  exp(optimization$solution[7]) ,
+           "pc_rob" =  exp(optimization$solution[5]) ,
+            "k_rob_in" =  exp(optimization$solution[6]),
+            "k_rob_out" =  exp(optimization$solution[7]) ,
            # "Q_pc_interstitial" =  exp(optimization$solution[8]),
            # "Q_pc_lu" =  exp(optimization$solution[9]) ,
            
-           "k_rob_in" =  0.051 , 
-           "k_rob_out" = 0.063,
+          # "k_rob_in" =  0.051 , 
+          # "k_rob_out" = 0.063,
            "Hct" = 0.45,"np_size" = 6.5,
            'k_lu_in' = 0.400,  'k_lu_out' =0.0598,
            "physiological_pars" = physiological_pars, 
