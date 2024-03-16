@@ -232,6 +232,9 @@ Rat_model <- function(time, inits, params){
     V_lu_cap <-  parameters["V_lu_cap"]
     V_rob_is <- parameters["V_rob_is"]
     V_rob_cap <- parameters["V_rob_cap"]
+    GFRC = 62.1	#glomerular filtration rate (L/hr/kg kidney) (male); Corley, 2005
+    MK <- interpolated_weight * (0.73/100) #kidney mass in g
+    GFR = GFRC*(MK/1000)/1000	#scaled glomerular filtration rate (mL/hr)
     
     Q_total <- Q_blood_total*(1-Hct)
     QL_lu <- Q_total/500
@@ -261,9 +264,9 @@ Rat_model <- function(time, inits, params){
     # Lungs
     dM_lu_cap <-  Q_total*C_ven - (Q_total-QL_lu)*C_lu_cap - (1-sigma_lu)*QL_lu*C_lu_cap 
     dM_lu_is <- (1-sigma_lu)*QL_lu*C_lu_cap   -QL_lu*C_lu_is -
-                      k_lu_in *M_lu_is + k_lu_out *M_lu_cell - M_lu_is*pc_lu
-    dM_lu_cell <- k_lu_in *M_lu_is - k_lu_out *M_lu_cell
-    dM_lu_pc <- M_lu_is*pc_lu
+                      k_lu_in *M_lu_is + k_lu_out *M_lu_cell #- M_lu_is*pc_lu
+    dM_lu_cell <-k_lu_in *M_lu_is - k_lu_out *M_lu_cell
+    dM_lu_pc <-  0#M_lu_is*pc_lu
     
     #Rest of the body
     dM_rob_cap <-  Q_total*C_art - (Q_total-QL_rob)*C_rob_cap - 
@@ -277,10 +280,10 @@ Rat_model <- function(time, inits, params){
     dM_ven <- (Q_total-QL_rob)*C_rob_cap + QL_rob*C_rob_is + QL_lu*C_lu_is- Q_total*C_ven
     
     # Arterial Blood
-    dM_art <- (Q_total-QL_lu)*C_lu_cap - Q_total*C_art
+    dM_art <- (Q_total-QL_lu)*C_lu_cap - Q_total*C_art - GFR*CLE_u_frac*C_art
     
     # Excreta
-    dM_excreta <- CLE_f*M_rob_cell
+    dM_excreta <- CLE_f*M_rob_cell+GFR*CLE_u_frac*C_art
     
     Whole_blood <- M_art+M_ven
     Lungs <- M_lu_cap + M_lu_is + M_lu_pc+ M_lu_cell
@@ -299,7 +302,7 @@ Rat_model <- function(time, inits, params){
 obj_func <- function(x, dose, df, pars, metric = "AAFE"){
   BodyBurden <- c(df$lungs, df$rob, df$excreta, df$blood)
   parms <- c("rob_pore_size" = exp(x[1]), "lung_pore_size" = exp(x[2]),
-             "CLE_f" = exp(x[3]),"pc_lu" = exp(x[4]),
+             "CLE_f" = exp(x[3]),"CLE_u_frac" = exp(x[4]),
              "pc_rob" =  exp(x[5]) ,
              #"k_rob_in" =  exp(x[6]),
            #  "k_rob_out" =  exp(x[7]) ,
@@ -308,7 +311,7 @@ obj_func <- function(x, dose, df, pars, metric = "AAFE"){
              
              "Hct" = 0.45,  "np_size" = 6.55,
              'k_lu_in' = 0.400,  'k_lu_out' =0.0598,
-           #  "k_rob_in" = 0.051, "k_rob_out" = 0.063,
+            "k_rob_in" = 0.051, "k_rob_out" = 0.063,
              "physiological_pars" = pars$physiological_pars, 
              "all_weights" = pars$all_weights)
   sol_times <- c(seq(0,1, 0.001),seq(1.1,5, 0.1),  seq(6,28*24, 1))
@@ -362,7 +365,7 @@ df <- data.frame(time = c(1, 4, 24, 7*24, 28*24), lungs = unname(data_mass[,"lun
 df$excreta <- dose - (df$lungs+df$rob+df$blood)
 
 # Vector of all possible interpolated weights
-all_weights <- 229:288
+all_weights <- 229:288 #g
 physiological_pars <- list()
 for(i in 1:length(all_weights)){
   physiological_pars[[i]] <- create.params(all_weights[i])
@@ -378,12 +381,12 @@ opts <- list( "algorithm" = "NLOPT_LN_SBPLX", #"NLOPT_LN_NEWUOA",NLOPT_LN_SBPLX 
 
 
 # Define initial values of fitted parameters to provide to the optimization routine
-x0 <-  c(log(10),log(8),1,1,1,0,0)#,-17,1,1,-5)
+x0 <-  c(log(10),log(8),1,1,0)#,-17,1,1,-5)
 set.seed(435)
 optimization<- nloptr::nloptr(x0 = x0,
                               eval_f = obj_func,
-                              lb	=  c(log(6.551),log(6.551),-10,-10,-10, log(0.001),log(0.001)),#-30,-10,-10,-10),
-                              ub =   c(log(5000),log(100),15,10,10, log(10),log(10)),#-5,7,7,2),
+                              lb	=  c(log(6.551),log(6.551),-10,-10,-20),#-30,-10,-10,-10),
+                              ub =   c(log(5000),log(100),15,10,0),#-5,7,7,2),
                               opts = opts,
                               dose = dose,
                               df = df,
