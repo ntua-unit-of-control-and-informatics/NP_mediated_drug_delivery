@@ -380,14 +380,14 @@ obj_func_internal <- function(x, dose, df, pars, fraction, metric = "AAFE"){
              "CLE_f" = exp(x[3]),
              "pc_rob" =  exp(x[4]) ,
              "k_rob_in" =  exp(x[5]),
-          #"k_rob_out" =  exp(x[6]) ,
+          "k_rob_out" =  exp(x[6]) ,
              #"pc_exo" =  exp(x[6]), "Q_pc_sinusoids" =  exp(x[7]),"Q_pc_interstitial" =  exp(x[8]),
              # "Q_pc_lu" =  exp(x[9]),
              
              "Hct" = 0.45,  "np_size" = 6.55,
              'k_lu_in' = 0.400,  'k_lu_out' =0.0598,
             #"k_rob_in" = 0.051, 
-           "k_rob_out" = 0.063,
+           #"k_rob_out" = 0.063,
              "physiological_pars" = pars$physiological_pars, 
              "all_weights" = pars$all_weights)
   inits <- create.inits(dose, fraction)
@@ -480,7 +480,7 @@ opts <- list( "algorithm" = "NLOPT_LN_SBPLX", #"NLOPT_LN_NEWUOA",NLOPT_LN_SBPLX 
               "print_level" = 1)
 
 initial_fraction <- log(0.5)
-#external_optimization<- nloptr::nloptr(x0 = initial_fraction,
+external_optimization<- nloptr::nloptr(x0 = initial_fraction,
                                       eval_f = obj_func_external,
                                       lb	= -3,
                                       ub =  0,
@@ -491,16 +491,13 @@ initial_fraction <- log(0.5)
                                       options = opts,
                                       metric = "AAFE")
 fraction <- exp(external_optimization$solution)
-fraction <- 0.67
 opts$maxeval <- 1000
-x0 <-  c(log(10),log(8),1,1,log(0.5))
+x0 <-  c(log(10),log(8),1,1,log(0.5),log(0.5))
 set.seed(123)
 optimization<- nloptr::nloptr(x0 = x0,
                                        eval_f = obj_func_internal,
-                                       #lb	=  c(log(6.551),log(6.551),-10,-10, log(0.01), log(0.01)),
-                                       lb	=  c(log(6.551),log(6.551),-10,-10, log(0.005)),
-                                      # ub =   c(log(5000),log(100),10,10,  log(3),  log(3)),
-                                        ub =   c(log(5000),log(100),10,10,  log(3)),
+                                       lb	=  c(log(6.551),log(6.551),-10,-10, log(0.01), log(0.01)),
+                                       ub =   c(log(5000),log(100),10,10,  log(3),  log(3)),
                                        opts = opts,
                                        dose = dose,
                                        df = df,
@@ -513,7 +510,7 @@ parms <- c("rob_pore_size" = exp(optimization$solution[1]),
            "CLE_f" = exp(optimization$solution[3]),
            "pc_rob" =  exp(optimization$solution[4]) ,
             "k_rob_in" =  exp(optimization$solution[5]),
-          # "k_rob_out" =  exp(optimization$solution[6]) ,
+           "k_rob_out" =  exp(optimization$solution[6]) ,
            # "Q_pc_interstitial" =  exp(optimization$solution[8]),
            # "Q_pc_lu" =  exp(optimization$solution[9]) ,
            
