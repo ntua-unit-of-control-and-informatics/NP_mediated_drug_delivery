@@ -1,90 +1,8 @@
 # Working directory
+library(ggplot2)
+library(deSolve)
 
-setwd("C:/Users/user/Documents/GitHub/NP_mediated_drug_delivery")
-
-# *** metrics ***
-
-# The metric used for the optimization
-mse_custom <- function(observed, predicted){
-  mean((observed - predicted)^2)
-}
-
-mape <- function(observed, predicted){
-  mean(abs(observed-predicted)*100/observed)
-}
-
-rmse <- function(observed, predicted){
-  sqrt(mean((observed-predicted)^2)) 
-}
-
-AAFE <- function(observations, predictions, times=NULL){
-  y_obs <- unlist(observations)
-  y_pred <- unlist(predictions)
-  # Total number of observations
-  N<- length(y_obs)
-  log_ratio <- rep(NA, N) 
-  for ( i in 1:N){
-    log_ratio[i] <- abs(log((y_pred[i]/y_obs[i]), base = 10))
-  }
-  aafe <- 10^(sum(log_ratio)/N) 
-  return(aafe)
-}
-
-SODI <- function(observed, predicted, comp.names =NULL){
-  # Check if the user provided the correct input format
-  if (!is.list(observed) || !is.list(predicted)){
-    stop(" The observations and predictions must be lists")
-  }
-  # Check if the user provided equal length lists
-  if (length(observed) != length(predicted)){
-    stop(" The observations and predictions must have the same compartments")
-  }
-  Ncomp <- length(observed) # Number of compartments
-  I <- rep(NA, Ncomp) # Compartment discrepancy index
-  N_obs <- rep(NA, Ncomp) #Number of observations per compartment
-  #loop over the compartments
-  for (i in 1:Ncomp){
-    Et <- 0 #relative error with observations
-    St <- 0  #relative error with simulations
-    N <- length(observed[[i]]) # number of observations for compartment i
-    # Check if observations and predictions have equal length
-    if(N != length(predicted[[i]])){
-      stop(paste0("Compartment ",i," had different length in the observations and predictions"))
-    }
-    N_obs[i] <- N # populate the N_obs vector
-    for (j in 1:N){
-      # sum of relative squared errors (error = observed - predicted)
-      Et <- Et + ( abs(observed[[i]][j] - predicted[[i]][j])  / observed[[i]][j] )  ^2
-      St <- St + ( abs(observed[[i]][j] - predicted[[i]][j])  / predicted[[i]][j] )  ^2
-    }
-    
-    # root mean of the square of observed values
-    RMEt <- sqrt(Et/N)
-    # root mean of the square of simulated values
-    RMSt <- sqrt( St/N)
-    
-    I[i] <- (RMEt + RMSt)/2   
-  }
-  # Total number of observations
-  Ntot <- sum(N_obs)
-  # Initialise the consolidated discrepancy index
-  Ic <-0
-  for (i in 1:Ncomp){
-    # Give weight to compartments with more observations (more information)
-    Ic <- Ic +  I[i]* N_obs[i]/Ntot
-  }
-  # Name the list of compartment discrepancy indices
-  if ( !is.null(comp.names)){
-    names(I) <- comp.names
-  }else if (!is.null(names(observed))){
-    names(I) <- names(observed)
-  } else if (!is.null(names(predicted)) && is.null(comp.names) ){
-    names(I) <- names(predicted)
-  }
-  return(Ic)
-  #return(list(Total_index = Ic, Compartment_index= I))
-}
-
+setwd("C:/Users/ptsir/Documents/GitHub/NP_mediated_drug_delivery")
 #####################################
 ### Function to create Parameters ###
 #####################################
@@ -198,7 +116,7 @@ create.params <<- function(weight){
 #2. Function to create initial values for ODEs 
 #===============================================
 
-create.inits <- function(dose, fraction){
+create.inits <<- function(dose, fraction){
   M_lu_cap_small<-0; M_lu_is_small<-0;M_lu_cell_small <- 0; M_lu_pc_small <- 0;
   M_rob_cap_small<-0; M_rob_is_small<-0; 
   M_rob_cell_small <- 0; M_rob_pc_small <- 0;
@@ -225,12 +143,12 @@ create.inits <- function(dose, fraction){
             "M_rob_cell_big" = M_rob_cell_big,
             "M_rob_pc_big" = M_rob_pc_big,
             "M_ven_big" = M_ven_big, "M_art_big" = M_art_big,"M_excreta_big" = M_excreta_big))
-
+  
 }
 #==============
 #3. ODEs System
 #==============
-Rat_model <- function(time, inits, params){
+Rat_model <<- function(time, inits, params){
   with(as.list(c(inits, params)),{
     #Estimate the interpolated weights
     if (time<=7*24){
@@ -256,8 +174,8 @@ Rat_model <- function(time, inits, params){
     Q_total <- Q_blood_total*(1-Hct)
     QL_lu <- Q_total/500
     QL_rob <- Q_total/500
-   
-     # Concentrations (micro grams of NPs)/(mL tissue)
+    
+    # Concentrations (micro grams of NPs)/(mL tissue)
     C_lu_is_small <- M_lu_is_small/V_lu_is
     C_lu_cap_small <- M_lu_cap_small/V_lu_cap
     C_rob_is_small <- M_rob_is_small/V_rob_is
@@ -274,6 +192,9 @@ Rat_model <- function(time, inits, params){
     
     #Estimate lung's reflection coefficient
     a_lu <- np_size/lung_pore_size
+    if(np_size>lung_pore_size){
+      a_lu <- 1
+    }
     Phi_lu = (1-a_lu)^2
     F_lu <- (((1-a_lu^2)^(3/2))*Phi_lu)/(1+0.2*(a_lu^2)*(1-a_lu^2)^16)
     G_lu <- ((1- (2*a_lu^2)/3 - 0.20217*a_lu^5 )/ (1-0.75851*a_lu^5)) - (0.0431*(1-(1-a_lu^10)))
@@ -281,6 +202,9 @@ Rat_model <- function(time, inits, params){
     
     #Estimate rob reflection coefficient
     a_rob <- np_size/rob_pore_size
+    if(np_size>rob_pore_size){
+      a_rob <- 1
+    }
     Phi_rob = (1-a_rob)^2
     F_rob <- (((1-a_rob^2)^(3/2))*Phi_rob)/(1+0.2*(a_rob^2)*(1-a_rob^2)^16)
     G_rob <- ((1- (2*a_rob^2)/3 - 0.20217*a_rob^5 )/ (1-0.75851*a_rob^5)) - (0.0431*(1-(1-a_rob^10)))
@@ -291,28 +215,28 @@ Rat_model <- function(time, inits, params){
     #----------------------------------------------------------------
     # Lungs
     dM_lu_cap_small <-  Q_total*C_ven_small - (Q_total-QL_lu)*C_lu_cap_small -
-                        (1-sigma_lu)*QL_lu*C_lu_cap_small 
+      (1-sigma_lu)*QL_lu*C_lu_cap_small 
     dM_lu_is_small <- (1-sigma_lu)*QL_lu*C_lu_cap_small   -QL_lu*C_lu_is_small -
-                      k_lu_in *M_lu_is_small + k_lu_out *M_lu_cell_small #- M_lu_is*pc_lu
+      k_lu_in *M_lu_is_small + k_lu_out *M_lu_cell_small #- M_lu_is*pc_lu
     dM_lu_cell_small <-k_lu_in *M_lu_is_small - k_lu_out *M_lu_cell_small
     dM_lu_pc_small <-  0#M_lu_is*pc_lu
     
     #Rest of the body
     dM_rob_cap_small <-  Q_total*C_art_small - (Q_total-QL_rob)*C_rob_cap_small - 
-                    (1-sigma_rob)*QL_rob*C_rob_cap_small - M_rob_cap_small*pc_rob
+      (1-sigma_rob)*QL_rob*C_rob_cap_small - M_rob_cap_small*pc_rob
     dM_rob_is_small <- (1-sigma_rob)*QL_rob*C_rob_cap_small - QL_rob*C_rob_is_small -
-                  k_rob_in *M_rob_is_small + k_rob_out *M_rob_cell_small 
+      k_rob_in *M_rob_is_small + k_rob_out *M_rob_cell_small 
     dM_rob_cell_small <- k_rob_in *M_rob_is_small - k_rob_out *M_rob_cell_small - 
-                          CLE_f*M_rob_cell_small
+      CLE_f*M_rob_cell_small
     dM_rob_pc_small <- M_rob_cap_small*pc_rob
     
     # Venous Blood
     dM_ven_small <- (Q_total-QL_rob)*C_rob_cap_small + QL_rob*C_rob_is_small + 
-                        QL_lu*C_lu_is_small- Q_total*C_ven_small
+      QL_lu*C_lu_is_small- Q_total*C_ven_small
     
     # Arterial Blood
     dM_art_small <- (Q_total-QL_lu)*C_lu_cap_small - Q_total*C_art_small - 
-                      GFR*C_art_small
+      GFR*C_art_small
     
     # Excreta
     dM_excreta_small <- CLE_f*M_rob_cell_small+GFR*C_art_small
@@ -334,7 +258,7 @@ Rat_model <- function(time, inits, params){
     dM_rob_is_big <- (1-sigma_rob)*QL_rob*C_rob_cap_big - QL_rob*C_rob_is_big -
       k_rob_in *M_rob_is_big + k_rob_out *M_rob_cell_big 
     dM_rob_cell_big <- k_rob_in *M_rob_is_big - k_rob_out *M_rob_cell_big - 
-                      CLE_f*M_rob_cell_big
+      CLE_f*M_rob_cell_big
     dM_rob_pc_big <- M_rob_cap_big*pc_rob
     
     # Venous Blood
@@ -343,7 +267,7 @@ Rat_model <- function(time, inits, params){
     
     # Arterial Blood
     dM_art_big <- (Q_total-QL_lu)*C_lu_cap_big - Q_total*C_art_big  
-      
+    
     
     # Excreta
     dM_excreta_big <- CLE_f*M_rob_cell_big
@@ -351,10 +275,14 @@ Rat_model <- function(time, inits, params){
     # Total amounts of NPs
     Whole_blood <- M_art_small + M_ven_small + M_art_big + M_ven_big
     Lungs <- M_lu_cap_small + M_lu_is_small + M_lu_pc_small + M_lu_cell_small+
-            M_lu_cap_big + M_lu_is_big + M_lu_pc_big + M_lu_cell_big
+      M_lu_cap_big + M_lu_is_big + M_lu_pc_big + M_lu_cell_big
     Rob <- M_rob_cap_small + M_rob_is_small + M_rob_cell_small + M_rob_pc_small + 
-            M_rob_cap_big + M_rob_is_big + M_rob_cell_big + M_rob_pc_big
+      M_rob_cap_big + M_rob_is_big + M_rob_cell_big + M_rob_pc_big
     Excreta <- M_excreta_small  +M_excreta_big 
+    
+    NP_tot <- Whole_blood + Lungs + Rob + Excreta
+    selectivity <- (M_lu_cell_small+M_lu_cell_big)/(Whole_blood + Rob + Lungs)
+    efficiency <- (M_lu_cell_small+M_lu_cell_big)/NP_tot   
     
     list(c("dM_lu_cap_small" = dM_lu_cap_small, "dM_lu_is_small" = dM_lu_is_small, 
            "dM_lu_cell_small" = dM_lu_cell_small,"dM_lu_pc_small" = dM_lu_pc_small,
@@ -370,56 +298,40 @@ Rat_model <- function(time, inits, params){
            "dM_rob_pc_big" = dM_rob_pc_big,
            "dM_ven_big" = dM_ven_big,"dM_art_big" = dM_art_big,
            "dM_excreta_big" = dM_excreta_big), 
-         "Whole_blood"=Whole_blood,"Lungs" = Lungs, "Rob" = Rob, "Excreta" = Excreta)
+         "Whole_blood"=Whole_blood,"Lungs" = Lungs, "Rob" = Rob, "Excreta" = Excreta,
+         "selectivity" =selectivity, "efficiency" = efficiency )
   })
 }
 
-obj_func <- function(x, dose, df, pars, metric = "AAFE"){
-  BodyBurden <- c(df$lungs, df$rob, df$excreta, df$blood)
-  parms <- c("rob_pore_size" = exp(x[1]), "lung_pore_size" = exp(x[2]),
-             "CLE_f" = exp(x[3]),
-             "pc_rob" =  exp(x[4]) ,
-             "k_rob_in" =  exp(x[5]),
-           #  "k_rob_out" =  exp(x[7]) ,
-             #"pc_exo" =  exp(x[6]), "Q_pc_sinusoids" =  exp(x[7]),"Q_pc_interstitial" =  exp(x[8]),
-             # "Q_pc_lu" =  exp(x[9]),
-             
-             "Hct" = 0.45,  "np_size" = 6.55,
+# Function for estimating perturbations of response based on changes in size
+perturbations <- function(physiological_pars,all_weights,
+                          fraction_perturbation = 1, np_size_perturbation = 1){
+  
+  fraction <- 0.697*fraction_perturbation
+  inits <- create.inits(unname(dose), fraction)
+  
+  parms <- c("rob_pore_size" = 7.29, 
+             "lung_pore_size" =8.84,
+             "CLE_f" = 21500,
+             "pc_rob" = 0.0039 ,
+             "k_rob_in" =  3,
+             "k_rob_out" = 0.94 ,
+             "Hct" = 0.45,"np_size" =6.5 * np_size_perturbation,
              'k_lu_in' = 0.400,  'k_lu_out' =0.0598,
-            #"k_rob_in" = 0.051, 
-           "k_rob_out" = 0.063,
-             "physiological_pars" = pars$physiological_pars, 
-             "all_weights" = pars$all_weights)
-  fraction = exp(x[6])
-  inits <- create.inits(dose, fraction)
-  sol_times <- c(seq(0,1, 0.001),seq(1.1,5, 0.1),  seq(6,28*24, 1))
+             "physiological_pars" = physiological_pars, 
+             "all_weights" = all_weights)
+  sol_times <- seq(0,28*24, 1 )
   solution <- data.frame(deSolve::ode(times = sol_times,  func = Rat_model,
-                                      y = inits, parms = parms, method="bdf",
-                                      rtol = 1e-4, atol = 1e-4))
-  if(sum(solution$time %in% df$time) == length( df$time)){
-    results <- c(solution[solution$time %in% df$time, "Lungs"],
-                 solution[solution$time %in% df$time, "Rob"],
-                 solution[solution$time %in% df$time, "Excreta"],
-                 solution[solution$time %in% df$time, "Whole_blood"])
-  }else{
-    results <-   BodyBurden *1000
-    
-  }
-  
-  
-  # Find the position of the current PFAS in the PFAS_names vector
-  if(metric == "AAFE"){
-    score <- AAFE(BodyBurden, results) 
-  }else if (metric =="rmse"){
-    score <- rmse(BodyBurden, results)
-  }else if(metric == "SODI"){
-    score <- SODI(list(BodyBurden), list(results))
-  }       
-  return(score)
+                                      y = inits, parms = parms, method="lsodes",
+                                      rtol = 1e-7, atol = 1e-7))
+
+  return(solution)
 }
 
 ##############################################################################
 ################################################################################
+
+
 # Load the data for PFAS concentration
 data_concentration <- t(openxlsx::read.xlsx ('PEG-AU-NPs.xlsx', 
                                              sheet = "Kozics_concentration", 
@@ -428,9 +340,8 @@ data_mass <- t(openxlsx::read.xlsx ('PEG-AU-NPs.xlsx',
                                     sheet = "Kozics_mass", 
                                     colNames = TRUE, rowNames = TRUE)[1:5,])
 
-
 dose_per_weight <- 0.7 #mg/kg
-dose <- dose_per_weight*229
+dose <<- dose_per_weight*229
 #The percentage of gold recovery in the analyzed samples
 #detected 1 h after i.v. injection accounted for approximately 68.5% of the total injected
 #dose.
@@ -440,7 +351,6 @@ df <- data.frame(time = c(1, 4, 24, 7*24, 28*24), lungs = unname(data_mass[,"lun
                                 data_mass[,"kidneys"]),  excreta = rep(NA, 5),
                  blood = unname(data_mass[,"blood"]))
 df$excreta <- dose - (df$lungs+df$rob+df$blood)
-
 # Vector of all possible interpolated weights
 all_weights <- 229:288 #g
 physiological_pars <- list()
@@ -448,185 +358,80 @@ for(i in 1:length(all_weights)){
   physiological_pars[[i]] <- create.params(all_weights[i])
 }
 
-opts <- list( "algorithm" = "NLOPT_LN_SBPLX", #"NLOPT_LN_NEWUOA",NLOPT_LN_SBPLX , #"NLOPT_LN_BOBYQA" #"NLOPT_LN_COBYLA"
-              "xtol_rel" = 1e-7, 
-              "ftol_rel" = 1e-7,
-              "ftol_abs" = 0.0,
-              "xtol_abs" = 0.0 ,
-              "maxeval" = 1000,
-              "print_level" = 1)
+baseline <- perturbations(physiological_pars,all_weights)
+fraction_1.1 <- perturbations(physiological_pars,all_weights,fraction_perturbation = 1.1)
+fraction_0.9 <- perturbations(physiological_pars,all_weights,fraction_perturbation = 0.9)
+size_1.1 <- perturbations(physiological_pars,all_weights,np_size_perturbation = 1.1)
+size_0.9 <- perturbations(physiological_pars,all_weights,np_size_perturbation = 0.9)
 
 
-# Define initial values of fitted parameters to provide to the optimization routine
-x0 <-  c(log(10),log(8),1,1,log(0.5),log(0.5))#,-17,1,1,-5)
-set.seed(435)
-optimization<- nloptr::nloptr(x0 = x0,
-                              eval_f = obj_func,
-                              lb	=  c(log(6.551),log(6.551),-10,-10,-20, log(0.01)),#-30,-10,-10,-10),
-                              ub =   c(log(5000),log(100),10,10, 0, log(2)),#-5,7,7,2),
-                              opts = opts,
-                              dose = dose,
-                              df = df,
-                              metric = "SODI",
-                              pars = list("all_weights" = all_weights,
-                                          "physiological_pars" = physiological_pars ))
+selectivity_df <- data.frame(time = baseline$time, baseline = 100*baseline$selectivity, 
+                             fraction_1.1 = 100*fraction_1.1$selectivity,
+                             fraction_0.9 =  100*fraction_0.9$selectivity,
+                             size_1.1 = 100*size_1.1$selectivity,
+                             size_0.9 = 100*size_0.9$selectivity)
 
+cls <-  c("Fraction of Small NPs +10%" = "#56B4E9", "Fraction of Small NPs -10%" = "#E69F00",
+          "No Perturbation" ="#000000", "Size +10%" = "#009E73", "Size -10%" ="#CC79A7")
 
-parms <- c("rob_pore_size" = exp(optimization$solution[1]), 
-           "lung_pore_size" = exp(optimization$solution[2]),
-           "CLE_f" = exp(optimization$solution[3]),
-           "pc_rob" =  exp(optimization$solution[4]) ,
-            "k_rob_in" =  exp(optimization$solution[5]),
-           # "k_rob_out" =  exp(optimization$solution[7]) ,
-           # "Q_pc_interstitial" =  exp(optimization$solution[8]),
-           # "Q_pc_lu" =  exp(optimization$solution[9]) ,
-           
-           #"k_rob_in" =  0.051 , 
-           "k_rob_out" = 0.063,
-           "Hct" = 0.45,"np_size" = 6.5,
-           'k_lu_in' = 0.400,  'k_lu_out' =0.0598,
-           "physiological_pars" = physiological_pars, 
-           "all_weights" = all_weights)
-
-fraction <- exp(optimization$solution[5])
-sol_times <- seq(0,28*24, 1 )
-inits <- create.inits(unname(dose), fraction)
-solution <- data.frame(deSolve::ode(times = sol_times,  func = Rat_model,
-                                    y = inits, parms = parms, method="lsodes",
-                                    rtol = 1e-7, atol = 1e-7))
-library(ggplot2)
-# Lungs plot
-ggplot()+
-  geom_line(data = solution, aes(x=time, y=Lungs ), size=1.7)+
-  geom_point(data = df, aes(x=time  , y=lungs ), size=5)+
+# Selectivity plot
+selectivity_plot <- ggplot(data = selectivity_df)+
+  geom_line( aes(x=time, y=fraction_1.1, color = "Fraction of Small NPs +10%" ), size=1.7, alpha = 0.7)+
+  geom_line( aes(x=time, y=fraction_0.9, color = "Fraction of Small NPs -10%" ), size=1.7, alpha = 0.7)+
+  geom_line(aes(x=time, y=baseline, color = "No Perturbation" ), size=1.7, alpha = 0.7)+
+  geom_line(aes(x=time, y=size_1.1, color = "Size +10%" ), size=1.7, alpha = 0.7)+
+  geom_line(aes(x=time, y=size_0.9, color = "Size -10%" ), size=1.7, alpha = 0.7)+
   
-  labs(title = "NP mass in Lungs", y = "Micrograms", x = "Time (hours)")+
-  theme_bw()+
-  theme(plot.title = element_text(hjust = 0.5,size=30), 
-        axis.title.y =element_text(hjust = 0.5,size=25,face="bold"),
-        axis.text.y=element_text(size=22),
-        axis.title.x =element_text(hjust = 0.5,size=25,face="bold"),
-        axis.text.x=element_text(size=22),
-        legend.title=element_text(hjust = 0.5,size=25), 
-        legend.text=element_text(size=22)) + 
-  
-  theme(legend.key.size = unit(1.5, 'cm'),  
-        legend.title = element_text(size=14),
-        legend.text = element_text(size=14),
-        axis.text = element_text(size = 14))
+  labs( y = "Selectivity (%)", x = "Time (hours)")+
+  scale_color_manual("",values = cls)+
+  theme_light() + 
+  theme(plot.title = element_text(hjust = 0.5,size=20), 
+        axis.title.y =element_text(hjust = 0.5,size=18),
+        axis.text.y=element_text(size=16),
+        axis.title.x =element_text(hjust = 0.5,size=18),
+        axis.text.x=element_text(size=16),
+        legend.title=element_text(hjust = 0.5,size=18), 
+        legend.text=element_text(size=16),
+        legend.key.size = unit(1.5, 'cm'))
+# Save the plot with dynamically adjusted dimensions
+ggsave("selectivity_plot.png", plot = selectivity_plot,
+       device = 'png', dpi = 300,
+       width = 13,
+       height = 10,
+       units = "in")
+dev.off()
 
 ########
-# Rob plot
-ggplot()+
-  geom_line(data = solution, aes(x=time, y=Rob ), size=1.7)+
-  geom_point(data = df, aes(x=time  , y=rob ), size=5)+
+
+efficiency_df <- data.frame(time = baseline$time, baseline = 100*baseline$efficiency, 
+                             fraction_1.1 = 100*fraction_1.1$efficiency,
+                             fraction_0.9 =  100*fraction_0.9$efficiency,
+                             size_1.1 = 100*size_1.1$efficiency,
+                             size_0.9 = 100*size_0.9$efficiency)
+
+# Efficiency plot
+efficiency_plot <- ggplot(data = efficiency_df)+
+  geom_line( aes(x=time, y=fraction_1.1, color = "Fraction of Small NPs +10%" ), size=1.7, alpha = 0.7)+
+  geom_line( aes(x=time, y=fraction_0.9, color = "Fraction of Small NPs -10%" ), size=1.7, alpha = 0.7)+
+  geom_line(aes(x=time, y=baseline, color = "No Perturbation" ), size=1.7, alpha = 0.7)+
+  geom_line(aes(x=time, y=size_1.1, color = "Size +10%" ), size=1.7, alpha = 0.7)+
+  geom_line(aes(x=time, y=size_0.9, color = "Size -10%" ), size=1.7, alpha = 0.7)+
   
-  labs(title = "NP mass in Rob", y = "Micrograms", x = "Time (hours)")+
-  theme_bw()+
-  
-  theme(plot.title = element_text(hjust = 0.5,size=30), 
-        axis.title.y =element_text(hjust = 0.5,size=25,face="bold"),
-        axis.text.y=element_text(size=22),
-        axis.title.x =element_text(hjust = 0.5,size=25,face="bold"),
-        axis.text.x=element_text(size=22),
-        legend.title=element_text(hjust = 0.5,size=25), 
-        legend.text=element_text(size=22)) + 
-  
-  theme(legend.key.size = unit(1.5, 'cm'),  
-        legend.title = element_text(size=14),
-        legend.text = element_text(size=14),
-        axis.text = element_text(size = 14))
-
-
-########
-# Excreta plot
-ggplot()+
-  geom_line(data = solution, aes(x=time, y=Excreta ), size=1.7)+
-  geom_point(data = df, aes(x=time  , y=excreta ), size=5)+
-  
-  labs(title = "NP mass in Excreta", y = "Micrograms", x = "Time (hours)")+
-  theme_bw()+
-  
-  theme(plot.title = element_text(hjust = 0.5,size=30), 
-        axis.title.y =element_text(hjust = 0.5,size=25,face="bold"),
-        axis.text.y=element_text(size=22),
-        axis.title.x =element_text(hjust = 0.5,size=25,face="bold"),
-        axis.text.x=element_text(size=22),
-        legend.title=element_text(hjust = 0.5,size=25), 
-        legend.text=element_text(size=22)) + 
-  
-  theme(legend.key.size = unit(1.5, 'cm'),  
-        legend.title = element_text(size=14),
-        legend.text = element_text(size=14),
-        axis.text = element_text(size = 14))
-
-
-########
-# Blood plot
-ggplot()+
-  geom_line(data = solution, aes(x=time, y=Whole_blood ), size=1.7)+
-  geom_point(data = df, aes(x=time  , y=blood ), size=5)+
-  
-  labs(title = "NP mass in blood", y = "Micrograms", x = "Time (hours)")+
-  theme_bw()+
-  
-  theme(plot.title = element_text(hjust = 0.5,size=30), 
-        axis.title.y =element_text(hjust = 0.5,size=25,face="bold"),
-        axis.text.y=element_text(size=22),
-        axis.title.x =element_text(hjust = 0.5,size=25,face="bold"),
-        axis.text.x=element_text(size=22),
-        legend.title=element_text(hjust = 0.5,size=25), 
-        legend.text=element_text(size=22)) + 
-  
-  theme(legend.key.size = unit(1.5, 'cm'),  
-        legend.title = element_text(size=14),
-        legend.text = element_text(size=14),
-        axis.text = element_text(size = 14))
-
-###################
-# Generate Data   #
-###################
-# times <- seq(0,28*24, 0.01)
-# solution <- data.frame(deSolve::ode(times = times,  func = Rat_model,
-#                                     y = inits, parms = parms, method="lsodes",
-#                                     rtol = 1e-7, atol = 1e-7))
-# select_times <-c(0.1, 0.5, 1, 2, 5, 10,20, 30, 40, 50,100,250,672)
-# solution <- solution[solution$time %in% select_times,]
-# 
-# # Case 1: cell vicinity  is the whole organ
-# case1 <- data.frame(time = solution$time, administration_site = solution$M_ven+solution$M_art, 
-#                     cell_vicinity = solution$Lungs-solution$M_lu_cell,
-#                     cell_interior = solution$M_lu_cell, 
-#                     off_target = solution$Rob,
-#                     excreta = solution$M_excreta)
-# openxlsx::write.xlsx(case1, "case1.xlsx")
-# 
-# # Case 2: cell vicinity  is interstitial space
-# case2 <- data.frame(time = solution$time, administration_site = solution$M_ven+solution$M_art, 
-#                     cell_vicinity = solution$M_lu_is,
-#                     cell_interior = solution$M_lu_cell, 
-#                     off_target = solution$Rob+solution$M_lu_cap+solution$M_lu_pc,
-#                     excreta = solution$M_excreta)
-# openxlsx::write.xlsx(case1, "case2.xlsx")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  labs( y = "Efficiency (%)", x = "Time (hours)")+
+  scale_color_manual("",values = cls)+
+  theme_light() + 
+  theme(plot.title = element_text(hjust = 0.5,size=20), 
+        axis.title.y =element_text(hjust = 0.5,size=18),
+        axis.text.y=element_text(size=16),
+        axis.title.x =element_text(hjust = 0.5,size=18),
+        axis.text.x=element_text(size=16),
+        legend.title=element_text(hjust = 0.5,size=18), 
+        legend.text=element_text(size=16),
+        legend.key.size = unit(1.5, 'cm'))
+# Save the plot with dynamically adjusted dimensions
+ggsave("efficiency_plot.png", plot = efficiency_plot,
+       device = 'png', dpi = 300,
+       width = 13,
+       height = 10,
+       units = "in")
+dev.off()
