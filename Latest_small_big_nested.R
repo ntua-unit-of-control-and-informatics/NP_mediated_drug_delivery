@@ -394,7 +394,7 @@ obj_func_internal <- function(x, dose, df, pars, fraction, metric = "AAFE"){
   sol_times <- c(seq(0,1, 0.001),seq(1.1,5, 0.1),  seq(6,28*24, 1))
   solution <- data.frame(deSolve::ode(times = sol_times,  func = Rat_model,
                                       y = inits, parms = parms, method="bdf",
-                                      rtol = 1e-4, atol = 1e-4))
+                                      rtol = 1e-3, atol = 1e-3))
   if(sum(solution$time %in% df$time) == length( df$time)){
     results <- c(solution[solution$time %in% df$time, "Lungs"],
                  solution[solution$time %in% df$time, "Rob"],
@@ -422,14 +422,14 @@ obj_func_internal <- function(x, dose, df, pars, fraction, metric = "AAFE"){
 obj_func_external <- function(x, dose, df, pars , options, metric = "SODI"){
   fraction <- exp(x)
   # Define initial values of fitted parameters to provide to the optimization routine
-  x0 <-  c(log(10),log(8),1,1,log(0.5))#,-17,1,1,-5)
+  x0 <-  c(log(100),log(8),1,1,log(0.5),log(0.5))#,-17,1,1,-5)
   options$print_level <- 0
-  options$maxeval <- 200
+  options$maxeval <- 300
   set.seed(435)
   internal_optimization<- nloptr::nloptr(x0 = x0,
                                 eval_f = obj_func_internal,
-                                lb	=  c(log(6.551),log(6.551),-10,-10, log(0.01)),#-30,-10,-10,-10),
-                                ub =   c(log(5000),log(100),10,10,  log(2)),#-5,7,7,2),
+                                lb	=  c(log(6.551),log(6.551),-10,-10, log(0.005), log(0.005)),
+                                ub =   c(log(5000),log(100),10,10,  log(5),  log(5)),
                                 opts = options,
                                 dose = dose,
                                 df = df,
@@ -476,7 +476,7 @@ opts <- list( "algorithm" = "NLOPT_LN_SBPLX", #"NLOPT_LN_NEWUOA",NLOPT_LN_SBPLX 
               "ftol_rel" = 1e-7,
               "ftol_abs" = 0.0,
               "xtol_abs" = 0.0 ,
-              "maxeval" = 200,
+              "maxeval" = 300,
               "print_level" = 1)
 
 initial_fraction <- log(0.5)
@@ -492,12 +492,12 @@ external_optimization<- nloptr::nloptr(x0 = initial_fraction,
                                       metric = "AAFE")
 fraction <- exp(external_optimization$solution)
 opts$maxeval <- 1000
-x0 <-  c(log(10),log(8),1,1,log(0.5),log(0.5))
+x0 <-  c(log(100),log(8),1,1,log(0.5),log(0.5))
 set.seed(123)
 optimization<- nloptr::nloptr(x0 = x0,
                                        eval_f = obj_func_internal,
-                                       lb	=  c(log(6.551),log(6.551),-10,-10, log(0.01), log(0.01)),
-                                       ub =   c(log(5000),log(100),10,10,  log(3),  log(3)),
+                                       lb	=  c(log(6.551),log(6.551),-10,-10, log(0.001), log(0.001)),
+                                       ub =   c(log(5000),log(100),10,10,  log(15),  log(15)),
                                        opts = opts,
                                        dose = dose,
                                        df = df,
